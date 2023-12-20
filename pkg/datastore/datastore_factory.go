@@ -100,8 +100,8 @@ func NewOtsConfig(tableName string) *Config {
 	config := &Config{
 		Type:        TableStore,
 		TableName:   tableName,
-		TimeToAlive: -1,
-		MaxVersion:  1,
+		TimeToAlive: config2.ConfigGlobal.OtsTimeToAlive,
+		MaxVersion:  config2.MaxVersion,
 	}
 	switch tableName {
 	case KTaskTableName:

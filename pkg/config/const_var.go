@@ -88,6 +88,8 @@ const (
 	COLD_START_CONCURRENCY  = "COLD_START_CONCURRENCY"
 	MODEL_COLD_START_SERIAL = "MODEL_COLD_START_SERIAL"
 	SD_PATH                 = "SD_PATH"
+	SD_PORT                 = "SD_PORT"
+	SD_URL_PREFIX           = "http://localhost"
 )
 
 // function http trigger
@@ -126,4 +128,9 @@ const (
 const (
 	ColdStartConcurrency = 10
 	ModelColdStartSerial = false
+)
+
+// ots
+const (
+	MaxVersion = 1
 )

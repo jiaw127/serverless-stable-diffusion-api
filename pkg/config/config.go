@@ -2,11 +2,11 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	yaml "gopkg.in/yaml.v2"
 	"io/ioutil"
 	"os"
 	"strconv"
-	"strings"
 )
 
 var ConfigGlobal *Config
@@ -20,7 +20,7 @@ type ConfigYaml struct {
 	// oss
 	OssEndpoint string `yaml:"ossEndpoint"`
 	Bucket      string `yaml:"bucket"`
-	OssPath     string `yaml:"ossPath""`
+	OssPath     string `yaml:"ossPath"`
 	OssMode     string `yaml:"ossMode"`
 
 	// db
@@ -47,6 +47,7 @@ type ConfigYaml struct {
 	ProgressImageOutputSwitch string `yaml:"progressImageOutputSwitch"`
 
 	// sd
+	SdPort      string `yaml:"sdPort"`
 	SdUrlPrefix string `yaml:"sdUrlPrefix"`
 	SdPath      string `yaml:"sdPath"`
 	SdShell     string `yaml:"sdShell"`
@@ -110,11 +111,7 @@ func (c *Config) EnableLogin() bool {
 }
 
 func (c *Config) GetSDPort() string {
-	items := strings.Split(c.SdUrlPrefix, ":")
-	if len(items) == 3 {
-		return items[2]
-	}
-	return ""
+	return c.SdPort
 }
 
 func (c *Config) EnableProgressImg() bool {
@@ -160,6 +157,13 @@ func (c *Config) updateFromEnv() {
 	if sdPath != "" {
 		c.SdPath = sdPath
 	}
+
+	// sd port
+	sdPort := os.Getenv(SD_PORT)
+	if sdPort != "" {
+		c.SdPort = sdPort
+	}
+	c.SdUrlPrefix = fmt.Sprintf("%s:%s", SD_URL_PREFIX, c.SdPort)
 
 	// sd image cover
 	sdImage := os.Getenv(SD_IMAGE)
@@ -211,6 +215,16 @@ func (c *Config) updateFromEnv() {
 	}
 }
 
+// set default
+func (c *Config) setDefaults() {
+	if c.OtsTimeToAlive == 0 {
+		c.OtsTimeToAlive = -1
+	}
+	if c.ListenInterval == 0 {
+		c.ListenInterval = 1
+	}
+}
+
 func InitConfig(fn string) error {
 	yamlFile, err := ioutil.ReadFile(fn)
 	if err != nil {
@@ -245,5 +259,7 @@ func InitConfig(fn string) error {
 	if ConfigGlobal.GetFlexMode() == MultiFunc && ConfigGlobal.ServerName == PROXY && ConfigGlobal.Downstream == "" {
 		return errors.New("proxy need set downstream")
 	}
+	// check and set default
+	ConfigGlobal.setDefaults()
 	return nil
 }
