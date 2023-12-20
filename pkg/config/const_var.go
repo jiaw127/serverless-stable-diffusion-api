@@ -87,6 +87,7 @@ const (
 	GPU_MEMORY_SIZE         = "GPU_MEMORY_SIZE"
 	COLD_START_CONCURRENCY  = "COLD_START_CONCURRENCY"
 	MODEL_COLD_START_SERIAL = "MODEL_COLD_START_SERIAL"
+	SD_PATH                 = "SD_PATH"
 )
 
 // function http trigger

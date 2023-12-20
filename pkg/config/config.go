@@ -155,6 +155,12 @@ func (c *Config) updateFromEnv() {
 		c.UseLocalModels = useLocalModel
 	}
 
+	// sd path
+	sdPath := os.Getenv(SD_PATH)
+	if sdPath != "" {
+		c.SdPath = sdPath
+	}
+
 	// sd image cover
 	sdImage := os.Getenv(SD_IMAGE)
 	if sdImage != "" {
