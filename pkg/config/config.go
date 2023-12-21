@@ -40,6 +40,7 @@ type ConfigYaml struct {
 	MemorySize          int32   `yaml:"memorySize"`
 	InstanceConcurrency int32   `yaml:"instanceConcurrency"`
 	InstanceType        string  `yaml:"instanceType"`
+	Runtime             string  `yaml:"runtime"`
 
 	// user
 	SessionExpire             int64  `yaml:"sessionExpire"`
@@ -163,7 +164,7 @@ func (c *Config) updateFromEnv() {
 	if sdPort != "" {
 		c.SdPort = sdPort
 	}
-	c.SdUrlPrefix = fmt.Sprintf("%s:%s", SD_URL_PREFIX, c.SdPort)
+	c.SdUrlPrefix = fmt.Sprintf("%s:%s", DefaultSdUrlPrefix, c.SdPort)
 
 	// sd image cover
 	sdImage := os.Getenv(SD_IMAGE)
@@ -222,6 +223,24 @@ func (c *Config) setDefaults() {
 	}
 	if c.ListenInterval == 0 {
 		c.ListenInterval = 1
+	}
+	if c.SessionExpire == 0 {
+		c.SessionExpire = DefaultSessionExpire
+	}
+	if c.ExtraArgs == "" {
+		c.ExtraArgs = DefaultExtraArgs
+	}
+	if c.LoginSwitch == "" {
+		c.LoginSwitch = DefaultLoginSwitch
+	}
+	if c.UseLocalModels == "" {
+		c.UseLocalModels = DefaultUseLocalModel
+	}
+	if c.FlexMode == "" {
+		c.FlexMode = DefaultFlexMode
+	}
+	if c.OssMode == "" {
+		c.OssMode = DefaultOssMode
 	}
 }
 

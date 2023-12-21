@@ -89,7 +89,17 @@ const (
 	MODEL_COLD_START_SERIAL = "MODEL_COLD_START_SERIAL"
 	SD_PATH                 = "SD_PATH"
 	SD_PORT                 = "SD_PORT"
-	SD_URL_PREFIX           = "http://localhost"
+)
+
+// default value
+const (
+	DefaultSdUrlPrefix   = "http://localhost"
+	DefaultExtraArgs     = "--api --nowebui"
+	DefaultSessionExpire = 3600
+	DefaultLoginSwitch   = "off"       // value: off|on
+	DefaultUseLocalModel = "yes"       // value: yes|no
+	DefaultFlexMode      = "multiFunc" // value: singleFunc|multiFunc
+	DefaultOssMode       = "remote"
 )
 
 // function http trigger
