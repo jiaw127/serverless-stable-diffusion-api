@@ -72,7 +72,6 @@ func NewAgentServer(port string, dbType datastore.DatastoreType, mode string) (*
 			}
 		}
 		agentServer.sdManager = module.NewSDManager(config.ConfigGlobal.GetSDPort())
-
 		handler.RegisterHandlers(router, agentHandler)
 		router.NoRoute(agentHandler.NoRouterAgentHandler)
 		agentServer.listenTask = listenTask
