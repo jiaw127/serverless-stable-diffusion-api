@@ -352,12 +352,15 @@ func InitConfig(fn string) error {
 
 	// env cover yaml
 	ConfigGlobal.updateFromEnv()
-	if ConfigGlobal.GetFlexMode() == MultiFunc && ConfigGlobal.ServerName == PROXY && ConfigGlobal.Downstream == "" {
-		return errors.New("proxy need set downstream")
-	}
+
 	// check
-	if err := ConfigGlobal.check(); err != nil {
-		return err
+	if !ConfigGlobal.ExposeToUser() {
+		if ConfigGlobal.GetFlexMode() == MultiFunc && ConfigGlobal.ServerName == PROXY && ConfigGlobal.Downstream == "" {
+			return errors.New("proxy need set downstream")
+		}
+		if err := ConfigGlobal.check(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
