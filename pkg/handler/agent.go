@@ -719,6 +719,9 @@ func ReverseProxy(c *gin.Context) {
 	proxy.Director = func(req *http.Request) {
 		req.Header = c.Request.Header
 		req.Host = remote.Host
+		replacePath := fmt.Sprintf("/2016-08-15/proxy/%s.LATEST/%s",
+			config.ConfigGlobal.ServiceName, config.ConfigGlobal.FunctionName)
+		req.URL.Path = strings.Replace(req.URL.Path, replacePath, "", 1)
 		req.URL.Scheme = remote.Scheme
 		req.URL.Host = remote.Host
 		//if strings.HasPrefix(req.URL.Path, "/internal/ping") {
