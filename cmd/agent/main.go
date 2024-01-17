@@ -6,6 +6,7 @@ import (
 	"github.com/devsapp/serverless-stable-diffusion-api/pkg/datastore"
 	"github.com/devsapp/serverless-stable-diffusion-api/pkg/server"
 	"github.com/sirupsen/logrus"
+	"gopkg.in/natefinch/lumberjack.v2"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,7 +14,7 @@ import (
 )
 
 const (
-	defaultPort       = "7860"
+	defaultPort       = "9000"
 	defaultDBType     = datastore.TableStore
 	shutdownTimeout   = 5 * time.Second // 5s
 	defaultConfigPath = "config.yaml"
@@ -27,7 +28,7 @@ func handleSignal() {
 	logrus.Info("Shutting down server...")
 }
 
-func logInit(logLevel string) {
+func logInit(logLevel, logFile string) {
 	switch logLevel {
 	case "debug":
 		logrus.SetLevel(logrus.DebugLevel)
@@ -38,6 +39,13 @@ func logInit(logLevel string) {
 	default:
 		logrus.SetLevel(logrus.WarnLevel)
 	}
+	logrus.SetOutput(&lumberjack.Logger{
+		Filename:   logFile, // log output dir
+		MaxSize:    50,      // MB, max logfile size
+		MaxBackups: 3,       // max num logfile
+		MaxAge:     3,       // max day logfile
+		Compress:   false,   // is compress or not
+	})
 }
 
 func main() {
@@ -46,9 +54,10 @@ func main() {
 	configFile := flag.String("config", defaultConfigPath, "default config path")
 	mode := flag.String("mode", "dev", "service work mode debug|dev|product")
 	sdShell := flag.String("sd", "", "sd start shell")
+	logFile := flag.String("log", "", "log output dir")
 	flag.Parse()
 	// init log
-	logInit(*mode)
+	logInit(*mode, *logFile)
 	logrus.Info("agent start")
 
 	// init config

@@ -74,7 +74,6 @@ type ConfigEnv struct {
 	AccountId            string
 	AccessKeyId          string
 	AccessKeySecret      string
-	AccessKeyToken       string
 	Region               string
 	ServiceName          string
 	FunctionName         string
@@ -325,18 +324,17 @@ func InitConfig(fn string) error {
 	configEnv.AccountId = os.Getenv(ACCOUNT_ID)
 	configEnv.AccessKeyId = os.Getenv(ACCESS_KEY_ID)
 	configEnv.AccessKeySecret = os.Getenv(ACCESS_KEY_SECRET)
-	configEnv.AccessKeyToken = os.Getenv(ACCESS_KET_TOKEN)
 	configEnv.Region = os.Getenv(REGION)
 	configEnv.ServiceName = os.Getenv(SERVICE_NAME)
 	configEnv.FunctionName = os.Getenv(FC_FUNCTION_NAME)
 	// check valid
-	for _, val := range []string{configEnv.AccountId, configEnv.AccessKeyId,
-		configEnv.AccessKeySecret, configEnv.Region} {
-		if val == "" {
-			return errors.New("env not set ACCOUNT_ID || ACCESS_KEY_Id || " +
-				"ACCESS_KEY_SECRET || REGION, please check")
-		}
-	}
+	//for _, val := range []string{configEnv.AccountId, configEnv.AccessKeyId,
+	//	configEnv.AccessKeySecret, configEnv.Region} {
+	//	if val == "" {
+	//		return errors.New("env not set ACCOUNT_ID || ACCESS_KEY_Id || " +
+	//			"ACCESS_KEY_SECRET || REGION, please check")
+	//	}
+	//}
 	configYaml := new(ConfigYaml)
 	yamlFile, err := ioutil.ReadFile(fn)
 	if err == nil {

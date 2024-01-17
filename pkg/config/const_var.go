@@ -68,9 +68,8 @@ const (
 // env
 const (
 	ACCOUNT_ID              = "FC_ACCOUNT_ID"
-	ACCESS_KEY_ID           = "ALIBABA_CLOUD_ACCESS_KEY_ID"
-	ACCESS_KEY_SECRET       = "ALIBABA_CLOUD_ACCESS_KEY_SECRET"
-	ACCESS_KET_TOKEN        = "ALIBABA_CLOUD_SECURITY_TOKEN"
+	ACCESS_KEY_ID           = "SD_AK"
+	ACCESS_KEY_SECRET       = "SD_SK"
 	REGION                  = "FC_REGION"
 	SERVICE_NAME            = "FC_SERVICE_NAME"
 	OTS_ENDPOINT            = "OTS_ENDPOINT"
@@ -100,7 +99,7 @@ const (
 // default value
 const (
 	DefaultSdPort              = "7861"
-	DefaultSdPath              = "/stable-diffusion-webui"
+	DefaultSdPath              = "/var/fc/runtime/sd/func/stable-diffusion-webui"
 	DefaultSdPathProxy         = "/mnt/auto/sd"
 	DefaultExtraArgs           = "--api"
 	DefaultSessionExpire       = 3600

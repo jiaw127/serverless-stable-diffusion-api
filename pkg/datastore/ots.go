@@ -22,8 +22,8 @@ func getOtsType(s string) tablestore.DefinedColumnType {
 
 // InitOtsClient init ots client
 func InitOtsClient() {
-	otsClient = tablestore.NewClientWithConfig(conf.ConfigGlobal.OtsEndpoint, conf.ConfigGlobal.OtsInstanceName,
-		conf.ConfigGlobal.AccessKeyId, conf.ConfigGlobal.AccessKeySecret, conf.ConfigGlobal.AccessKeyToken, nil)
+	otsClient = tablestore.NewClient(conf.ConfigGlobal.OtsEndpoint, conf.ConfigGlobal.OtsInstanceName,
+		conf.ConfigGlobal.AccessKeyId, conf.ConfigGlobal.AccessKeySecret, nil)
 }
 
 type OtsStore struct {

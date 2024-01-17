@@ -57,23 +57,9 @@ func NewSDManager(port string) *SDManager {
 
 func (s *SDManager) getEnv() []string {
 	env := make([]string, 0)
-	fileMgrToken := ""
-	fileMgrEndpoint := ""
-	if fileMgr := FuncManagerGlobal.GetFileMgr(); fileMgr != nil && fileMgr.EnvironmentVariables != nil {
-		adminEnv := fileMgr.EnvironmentVariables
-		if token := adminEnv["TOKEN"]; token != nil {
-			fileMgrToken = *token
-		}
-		fileMgrEndpoint = GetHttpTrigger(*fileMgr.FunctionName)
-	}
-	env = append(
-		os.Environ(),
-		fmt.Sprintf("SERVERLESS_SD_FILEMGR_TOKEN=%s", fileMgrToken),
-		fmt.Sprintf("SERVERLESS_SD_FILEMGR_DOMAIN=%s", fileMgrEndpoint))
-
 	// not set DISABLE_HF_CHECK, default proxy enable
 	if !config.ConfigGlobal.GetDisableHealthCheck() {
-		env = append(env,
+		env = append(os.Environ(),
 			"HTTP_PROXY=http://127.0.0.1:1080",
 			"HTTPS_PROXY=http://127.0.0.1:1080",
 		)

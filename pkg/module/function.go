@@ -79,11 +79,11 @@ func InitFuncManager(funcStore datastore.Datastore) error {
 	var err error
 	if isFc3() {
 		FuncManagerGlobal.fc3Client, err = fc3.NewClient(new(openapi.Config).SetAccessKeyId(config.ConfigGlobal.AccessKeyId).
-			SetAccessKeySecret(config.ConfigGlobal.AccessKeySecret).SetSecurityToken(config.ConfigGlobal.AccessKeyToken).
+			SetAccessKeySecret(config.ConfigGlobal.AccessKeySecret).
 			SetProtocol("HTTP").SetEndpoint(fcEndpoint))
 	} else {
 		FuncManagerGlobal.fcClient, err = fc.NewClient(new(openapi.Config).SetAccessKeyId(config.ConfigGlobal.AccessKeyId).
-			SetAccessKeySecret(config.ConfigGlobal.AccessKeySecret).SetSecurityToken(config.ConfigGlobal.AccessKeyToken).
+			SetAccessKeySecret(config.ConfigGlobal.AccessKeySecret).
 			SetProtocol("HTTP").SetEndpoint(fcEndpoint))
 	}
 
@@ -429,7 +429,6 @@ func (f *FuncManager) ListFunction() *project.T {
 		Credentials: gr.Credentials{
 			AccessKeyID:     config.ConfigGlobal.AccessKeyId,
 			AccessKeySecret: config.ConfigGlobal.AccessKeySecret,
-			SecurityToken:   config.ConfigGlobal.AccessKeyToken,
 		},
 		Region:    config.ConfigGlobal.Region,
 		AccountID: config.ConfigGlobal.AccountId,

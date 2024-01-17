@@ -38,7 +38,7 @@ func NewOssManager() error {
 		OssGlobal = new(OssManagerLocal)
 	case config.REMOTE:
 		client, err := oss.New(config.ConfigGlobal.OssEndpoint, config.ConfigGlobal.AccessKeyId,
-			config.ConfigGlobal.AccessKeySecret, oss.SecurityToken(config.ConfigGlobal.AccessKeyToken))
+			config.ConfigGlobal.AccessKeySecret)
 		if err != nil {
 			return err
 		}

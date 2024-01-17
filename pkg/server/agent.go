@@ -38,10 +38,6 @@ func NewAgentServer(port string, dbType datastore.DatastoreType, mode string) (*
 	router.Use(handler.Stat())
 	tableFactory := datastore.DatastoreFactory{}
 	if config.ConfigGlobal.ExposeToUser() {
-		// init func manager
-		if err := module.InitFuncManager(nil); err != nil {
-			return nil, err
-		}
 		agentServer.sdManager = module.NewSDManager(config.ConfigGlobal.GetSDPort())
 		// enable ReverserProxy
 		router.Any("/*path", handler.ReverseProxy)
