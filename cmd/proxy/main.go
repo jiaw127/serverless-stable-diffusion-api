@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	defaultPort       = "7860"
+	defaultPort       = "9000"
 	defaultDBType     = datastore.TableStore
 	shutdownTimeout   = 5 * time.Second // 5s
 	defaultConfigPath = "config.json"
