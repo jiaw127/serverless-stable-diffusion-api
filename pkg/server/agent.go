@@ -79,7 +79,7 @@ func NewAgentServer(port string, dbType datastore.DatastoreType, mode string) (*
 		agentServer.sdManager = module.NewSDManager(config.ConfigGlobal.GetSDPort())
 
 		handler.RegisterHandlers(router, agentHandler)
-		baseUrl := fmt.Sprintf("/2016-08-15/proxy/%s.LATEST/%s",
+		var baseUrl = fmt.Sprintf("/2016-08-15/proxy/%s.LATEST/%s",
 			config.ConfigGlobal.ServiceName, config.ConfigGlobal.FunctionName)
 		handler.RegisterHandlersWithOptions(router, agentHandler, handler.GinServerOptions{BaseURL: baseUrl})
 		router.NoRoute(agentHandler.NoRouterAgentHandler)

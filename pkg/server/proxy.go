@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"github.com/devsapp/serverless-stable-diffusion-api/pkg/config"
 	"github.com/devsapp/serverless-stable-diffusion-api/pkg/datastore"
 	"github.com/devsapp/serverless-stable-diffusion-api/pkg/handler"
@@ -75,6 +76,9 @@ func NewProxyServer(port string, dbType datastore.DatastoreType, mode string) (*
 		router.Use(handler.ApiAuth())
 	}
 	handler.RegisterHandlers(router, proxyHandler)
+	var baseUrl = fmt.Sprintf("/2016-08-15/proxy/%s.LATEST/%s",
+		config.ConfigGlobal.ServiceName, config.ConfigGlobal.FunctionName)
+	handler.RegisterHandlersWithOptions(router, proxyHandler, handler.GinServerOptions{BaseURL: baseUrl})
 	router.NoRoute(proxyHandler.NoRouterHandler)
 
 	return &ProxyServer{
