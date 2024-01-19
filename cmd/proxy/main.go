@@ -7,6 +7,7 @@ import (
 	"github.com/devsapp/serverless-stable-diffusion-api/pkg/datastore"
 	"github.com/devsapp/serverless-stable-diffusion-api/pkg/server"
 	"github.com/sirupsen/logrus"
+	"gopkg.in/natefinch/lumberjack.v2"
 	"os"
 	"os/signal"
 	"syscall"
@@ -28,7 +29,7 @@ func handleSignal() {
 	logrus.Info("Shutting down server...")
 }
 
-func logInit(logLevel string) {
+func logInit(logLevel, logFile string) {
 	switch logLevel {
 	case "debug":
 		logrus.SetLevel(logrus.DebugLevel)
@@ -39,6 +40,13 @@ func logInit(logLevel string) {
 	default:
 		logrus.SetLevel(logrus.WarnLevel)
 	}
+	logrus.SetOutput(&lumberjack.Logger{
+		Filename:   logFile, // log output dir
+		MaxSize:    50,      // MB, max logfile size
+		MaxBackups: 3,       // max num logfile
+		MaxAge:     3,       // max day logfile
+		Compress:   false,   // is compress or not
+	})
 }
 
 func main() {
@@ -46,9 +54,10 @@ func main() {
 	dbType := flag.String("dbType", string(defaultDBType), "db type default sqlite")
 	configFile := flag.String("config", defaultConfigPath, "default config path")
 	mode := flag.String("mode", "dev", "service work mode debug|dev|product")
+	logFile := flag.String("log", "", "log output dir")
 	flag.Parse()
 
-	logInit(*mode)
+	logInit(*mode, *logFile)
 	logrus.Info(fmt.Sprintf("%s start", os.Getenv(config.SERVER_NAME)))
 
 	// init config
