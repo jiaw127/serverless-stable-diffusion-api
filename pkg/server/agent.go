@@ -43,13 +43,13 @@ func NewAgentServer(port string, dbType datastore.DatastoreType, mode string) (*
 		router.Any("/*path", handler.ReverseProxy)
 	} else {
 		// only api
-		// init function table
-		funcDataStore := tableFactory.NewTable(dbType, datastore.KModelServiceTableName)
-		// init func manager
-		if err := module.InitFuncManager(funcDataStore); err != nil {
-			logrus.Errorf("func manage init error %v", err)
-			return nil, err
-		}
+		//// init function table
+		//funcDataStore := tableFactory.NewTable(dbType, datastore.KModelServiceTableName)
+		//// init func manager
+		//if err := module.InitFuncManager(funcDataStore); err != nil {
+		//	logrus.Errorf("func manage init error %v", err)
+		//	return nil, err
+		//}
 		// init oss manager
 		if err := module.NewOssManager(); err != nil {
 			logrus.Errorf("oss init error %v", err)

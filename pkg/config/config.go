@@ -327,14 +327,6 @@ func InitConfig(fn string) error {
 	configEnv.Region = os.Getenv(REGION)
 	configEnv.ServiceName = os.Getenv(SERVICE_NAME)
 	configEnv.FunctionName = os.Getenv(FC_FUNCTION_NAME)
-	// check valid
-	//for _, val := range []string{configEnv.AccountId, configEnv.AccessKeyId,
-	//	configEnv.AccessKeySecret, configEnv.Region} {
-	//	if val == "" {
-	//		return errors.New("env not set ACCOUNT_ID || ACCESS_KEY_Id || " +
-	//			"ACCESS_KEY_SECRET || REGION, please check")
-	//	}
-	//}
 	configYaml := new(ConfigYaml)
 	yamlFile, err := ioutil.ReadFile(fn)
 	if err == nil {
@@ -355,6 +347,14 @@ func InitConfig(fn string) error {
 
 	// check
 	if !ConfigGlobal.ExposeToUser() {
+		// check valid
+		for _, val := range []string{configEnv.AccountId, configEnv.AccessKeyId,
+			configEnv.AccessKeySecret, configEnv.Region} {
+			if val == "" {
+				return errors.New("env not set ACCOUNT_ID || ACCESS_KEY_Id || " +
+					"ACCESS_KEY_SECRET || REGION, please check")
+			}
+		}
 		if ConfigGlobal.GetFlexMode() == MultiFunc && ConfigGlobal.ServerName == PROXY && ConfigGlobal.Downstream == "" {
 			return errors.New("proxy need set downstream")
 		}
