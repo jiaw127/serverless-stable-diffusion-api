@@ -343,10 +343,10 @@ func InitConfig(fn string) error {
 	if !ConfigGlobal.ExposeToUser() {
 		// check valid
 		for _, val := range []string{configEnv.AccountId, configEnv.AccessKeyId,
-			configEnv.AccessKeySecret, configEnv.Region, ConfigGlobal.Code} {
+			configEnv.AccessKeySecret, configEnv.Region} {
 			if val == "" {
 				return errors.New("env not set ACCOUNT_ID || ACCESS_KEY_Id || " +
-					"ACCESS_KEY_SECRET || REGION || sd_code, please check")
+					"ACCESS_KEY_SECRET || REGION, please check")
 			}
 		}
 		if err := ConfigGlobal.check(); err != nil {
