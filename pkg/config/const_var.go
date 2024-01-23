@@ -70,6 +70,7 @@ const (
 	ACCOUNT_ID              = "FC_ACCOUNT_ID"
 	ACCESS_KEY_ID           = "SD_AK"
 	ACCESS_KEY_SECRET       = "SD_SK"
+	SD_REGION               = "SD_REGION"
 	REGION                  = "FC_REGION"
 	SERVICE_NAME            = "FC_SERVICE_NAME"
 	OTS_ENDPOINT            = "OTS_ENDPOINT"
@@ -78,6 +79,7 @@ const (
 	OSS_BUCKET              = "OSS_BUCKET"
 	OSS_PATH                = "OSS_PATH"
 	OSS_MODE                = "OSS_MODE"
+	SD_OSS_CODE             = "SD_OSS_CODE"
 	LOGINSWITCH             = "LOGIN_SWITCH"
 	USER_LOCAL_MODEL        = "USE_LOCAL_MODEL"
 	SD_IMAGE                = "SD_IMAGE"
@@ -101,22 +103,20 @@ const (
 	DefaultSdPort              = "7861"
 	DefaultSdPath              = "/var/fc/runtime/sd/func/stable-diffusion-webui"
 	DefaultSdPathProxy         = "/mnt/auto/sd"
-	DefaultExtraArgs           = "--api"
+	DefaultExtraArgs           = "--api --nowebui"
 	DefaultSessionExpire       = 3600
 	DefaultLoginSwitch         = "off"       // value: off|on
-	DefaultUseLocalModel       = "yes"       // value: yes|no
+	DefaultUseLocalModel       = "no"        // value: yes|no
 	DefaultFlexMode            = "multiFunc" // value: singleFunc|multiFunc
 	DefaultOssPath             = "/mnt/oss"
-	DefaultLogService          = "http://server-ai-backend-agwwspzdwb.cn-hangzhou.devsapp.net"
-	DefaultCaPort              = 7860
-	DefaultCpu                 = 8
-	DefaultDisk                = 512
+	DefaultCpu                 = 3
+	DefaultDisk                = 10 * 1024
 	DefaultInstanceConcurrency = 1
-	DefaultInstanceType        = "fc.gpu.tesla.1"
-	DefaultMemorySize          = 32768
-	DefaultGpuMemorySize       = 16384
+	DefaultRuntime             = "sd"
+	DefaultMemorySize          = 1024 * 8
 	DefaultTimeout             = 600
 	DefaultOssMode             = REMOTE
+	DefaultHandler             = "main"
 )
 
 // function http trigger

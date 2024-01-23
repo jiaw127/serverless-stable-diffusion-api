@@ -23,6 +23,7 @@ type OssOp interface {
 	UploadFile(ossKey, localFile string) error
 	UploadFileByByte(ossKey string, body []byte) error
 	DownloadFile(ossKey, localFile string) error
+	DownloadFileToByte(ossKey string) (*string, error)
 	DeleteFile(ossKey string) error
 	DownloadFileToBase64(ossPath string) (*string, error)
 	GetUrl(ossPath []string) ([]string, error)
@@ -85,6 +86,21 @@ func (o *OssManagerRemote) UploadFileByByte(ossKey string, body []byte) error {
 // DownloadFile download file from oss
 func (o *OssManagerRemote) DownloadFile(ossKey, localFile string) error {
 	return o.bucket.GetObjectToFile(ossKey, localFile)
+}
+
+func (o *OssManagerRemote) DownloadFileToByte(ossKey string) (*string, error) {
+	// get image from oss
+	body, err := o.bucket.GetObject(ossKey)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := ioutil.ReadAll(body)
+	body.Close()
+	if err != nil {
+		return nil, err
+	}
+	return utils.String(string(data)), nil
 }
 
 // DeleteFile delete file from oss
@@ -164,4 +180,16 @@ func (o *OssManagerLocal) DownloadFileToBase64(ossKey string) (*string, error) {
 	}
 	imageBase64 := base64.StdEncoding.EncodeToString(data)
 	return &imageBase64, nil
+}
+
+func (o *OssManagerLocal) DownloadFileToByte(ossKey string) (*string, error) {
+	destFile := fmt.Sprintf("%s/%s", config.ConfigGlobal.OssPath, ossKey)
+	if !utils.FileExists(destFile) {
+		return nil, fmt.Errorf("ossKey:%s not exist", ossKey)
+	}
+	data, err := ioutil.ReadFile(destFile)
+	if err != nil {
+		return nil, err
+	}
+	return utils.String(string(data)), nil
 }

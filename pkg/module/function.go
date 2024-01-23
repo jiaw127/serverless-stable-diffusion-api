@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	openapi "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	fc3 "github.com/alibabacloud-go/fc-20230330/client"
 	fc "github.com/alibabacloud-go/fc-open-20210406/v2/client"
 	fcService "github.com/alibabacloud-go/tea-utils/v2/service"
@@ -15,7 +14,6 @@ import (
 	"github.com/devsapp/serverless-stable-diffusion-api/pkg/datastore"
 	"github.com/devsapp/serverless-stable-diffusion-api/pkg/utils"
 	"github.com/sirupsen/logrus"
-	"strings"
 	"sync"
 	"time"
 )
@@ -32,10 +30,7 @@ type SdModels struct {
 
 // FuncResource Fc resource
 type FuncResource struct {
-	Image          string                  `json:"image"`
 	CPU            float32                 `json:"cpu"`
-	GpuMemorySize  int32                   `json:"gpuMemorySize"`
-	InstanceType   string                  `json:"InstanceType"`
 	MemorySize     int32                   `json:"memorySize"`
 	Timeout        int32                   `json:"timeout"`
 	Env            map[string]*string      `json:"env"`
@@ -58,6 +53,8 @@ type FuncManager struct {
 	lock               sync.RWMutex
 	lastInvokeEndpoint string
 	prefix             string
+	sdCode             *string
+	once               sync.Once
 }
 
 func isFc3() bool {
@@ -66,30 +63,30 @@ func isFc3() bool {
 
 func InitFuncManager(funcStore datastore.Datastore) error {
 	// init fc client
-	fcEndpoint := fmt.Sprintf("%s.%s.fc.aliyuncs.com", config.ConfigGlobal.AccountId,
-		config.ConfigGlobal.Region)
+	//fcEndpoint := fmt.Sprintf("%s.%s.fc.aliyuncs.com", config.ConfigGlobal.AccountId,
+	//	config.ConfigGlobal.GetRegion())
 	FuncManagerGlobal = &FuncManager{
 		endpoints: make(map[string][]string),
 		funcStore: funcStore,
 	}
 	// extra prefix
-	if parts := strings.Split(config.ConfigGlobal.FunctionName, project.PrefixDelimiter); len(parts) >= 2 {
-		FuncManagerGlobal.prefix = fmt.Sprintf("%s%s", parts[0], project.PrefixDelimiter)
-	}
-	var err error
-	if isFc3() {
-		FuncManagerGlobal.fc3Client, err = fc3.NewClient(new(openapi.Config).SetAccessKeyId(config.ConfigGlobal.AccessKeyId).
-			SetAccessKeySecret(config.ConfigGlobal.AccessKeySecret).
-			SetProtocol("HTTP").SetEndpoint(fcEndpoint))
-	} else {
-		FuncManagerGlobal.fcClient, err = fc.NewClient(new(openapi.Config).SetAccessKeyId(config.ConfigGlobal.AccessKeyId).
-			SetAccessKeySecret(config.ConfigGlobal.AccessKeySecret).
-			SetProtocol("HTTP").SetEndpoint(fcEndpoint))
-	}
-
-	if err != nil {
-		return err
-	}
+	//if parts := strings.Split(config.ConfigGlobal.FunctionName, project.PrefixDelimiter); len(parts) >= 2 {
+	//	FuncManagerGlobal.prefix = fmt.Sprintf("%s%s", parts[0], project.PrefixDelimiter)
+	//}
+	//var err error
+	//if isFc3() {
+	//	FuncManagerGlobal.fc3Client, err = fc3.NewClient(new(openapi.Config).SetAccessKeyId(config.ConfigGlobal.AccessKeyId).
+	//		SetAccessKeySecret(config.ConfigGlobal.AccessKeySecret).
+	//		SetProtocol("HTTP").SetEndpoint(fcEndpoint))
+	//} else {
+	//	FuncManagerGlobal.fcClient, err = fc.NewClient(new(openapi.Config).SetAccessKeyId(config.ConfigGlobal.AccessKeyId).
+	//		SetAccessKeySecret(config.ConfigGlobal.AccessKeySecret).
+	//		SetProtocol("HTTP").SetEndpoint(fcEndpoint))
+	//}
+	//
+	//if err != nil {
+	//	return err
+	//}
 	if funcStore != nil {
 		// load func endpoint to cache
 		FuncManagerGlobal.loadFunc()
@@ -99,17 +96,17 @@ func InitFuncManager(funcStore datastore.Datastore) error {
 }
 
 // check ots table function list match fc function or not
-func (f *FuncManager) checkDbAndFcMatch() {
-	for sdModel, _ := range f.endpoints {
-		functionName := GetFunctionName(sdModel)
-		if f.GetFcFunc(functionName) == nil {
-			logrus.Errorf("sdModel:%s function in db, not in FC, auto delete ots table fucntion key=%s",
-				sdModel, sdModel)
-			// function in db not in FC
-			f.funcStore.Delete(sdModel)
-		}
-	}
-}
+//func (f *FuncManager) checkDbAndFcMatch() {
+//	for sdModel, _ := range f.endpoints {
+//		functionName := GetFunctionName(sdModel)
+//		if f.GetFcFunc(functionName) == nil {
+//			logrus.Errorf("sdModel:%s function in db, not in FC, auto delete ots table fucntion key=%s",
+//				sdModel, sdModel)
+//			// function in db not in FC
+//			f.funcStore.Delete(sdModel)
+//		}
+//	}
+//}
 
 // GetLastInvokeEndpoint get last invoke endpoint
 func (f *FuncManager) GetLastInvokeEndpoint(sdModel *string) string {
@@ -130,10 +127,7 @@ func (f *FuncManager) GetLastInvokeEndpoint(sdModel *string) string {
 // second get from db
 // third create function and return endpoint
 func (f *FuncManager) GetEndpoint(sdModel string) (string, error) {
-	key := "default"
-	if config.ConfigGlobal.GetFlexMode() == config.MultiFunc && sdModel != "" {
-		key = sdModel
-	}
+	key := sdModel
 	var err error
 	endpoint := ""
 	// retry
@@ -152,24 +146,24 @@ func (f *FuncManager) GetEndpoint(sdModel string) (string, error) {
 			f.lock.Unlock()
 			return endpoint, nil
 		}
-		// third create function
-		if endpoint, err = f.createFunc(key, sdModel, getEnv(sdModel)); endpoint != "" {
-			f.lastInvokeEndpoint = endpoint
-			f.lock.Unlock()
-			return endpoint, nil
-		}
-		// four create fail get function
-		functionName := GetFunctionName(sdModel)
-		if f.GetFcFunc(functionName) != nil {
-			if endpoint = GetHttpTrigger(functionName); endpoint != "" {
-				f.lastInvokeEndpoint = endpoint
-				f.endpoints[key] = []string{endpoint, sdModel}
-				logrus.Warnf("function %s sdModel %s in FC not in db, please check。Solution：del %s in FC",
-					functionName, sdModel, functionName)
-				f.lock.Unlock()
-				return endpoint, nil
-			}
-		}
+		//// third create function
+		//if endpoint, err = f.createFunc(key, sdModel, getEnv(sdModel)); endpoint != "" {
+		//	f.lastInvokeEndpoint = endpoint
+		//	f.lock.Unlock()
+		//	return endpoint, nil
+		//}
+		//// four create fail get function
+		//functionName := GetFunctionName(sdModel)
+		//if f.GetFcFunc(functionName) != nil {
+		//	if endpoint = GetHttpTrigger(functionName); endpoint != "" {
+		//		f.lastInvokeEndpoint = endpoint
+		//		f.endpoints[key] = []string{endpoint, sdModel}
+		//		logrus.Warnf("function %s sdModel %s in FC not in db, please check。Solution：del %s in FC",
+		//			functionName, sdModel, functionName)
+		//		f.lock.Unlock()
+		//		return endpoint, nil
+		//	}
+		//}
 		f.lock.Unlock()
 		reTry--
 		time.Sleep(RETRY_INTERVALMS)
@@ -204,16 +198,14 @@ func (f *FuncManager) UpdateFunctionEnv(key string) error {
 	//compatible fc3.0
 	if isFc3() {
 		if _, err := f.fc3Client.UpdateFunction(&functionName,
-			new(fc3.UpdateFunctionRequest).SetRequest(new(fc3.UpdateFunctionInput).SetRuntime("custom-container").
-				SetEnvironmentVariables(res.Env).SetGpuConfig(new(fc3.GPUConfig).
-				SetGpuMemorySize(res.GpuMemorySize).SetGpuType(res.InstanceType)))); err != nil {
+			new(fc3.UpdateFunctionRequest).SetRequest(new(fc3.UpdateFunctionInput).
+				SetEnvironmentVariables(res.Env))); err != nil {
 			logrus.Info(err.Error())
 			return err
 		}
 	} else {
 		if _, err := f.fcClient.UpdateFunction(&config.ConfigGlobal.ServiceName, &functionName,
-			new(fc.UpdateFunctionRequest).SetRuntime("custom-container").SetGpuMemorySize(res.GpuMemorySize).
-				SetEnvironmentVariables(res.Env)); err != nil {
+			new(fc.UpdateFunctionRequest).SetEnvironmentVariables(res.Env)); err != nil {
 			logrus.Info(err.Error())
 			return err
 		}
@@ -238,10 +230,9 @@ func (f *FuncManager) UpdateFunctionResource(resources map[string]*FuncResource)
 			}
 		} else {
 			if _, err := f.fcClient.UpdateFunction(&config.ConfigGlobal.ServiceName, &functionName,
-				new(fc.UpdateFunctionRequest).SetRuntime("custom-container").SetGpuMemorySize(resource.GpuMemorySize).
-					SetMemorySize(resource.MemorySize).SetCpu(resource.CPU).SetInstanceType(resource.InstanceType).
-					SetTimeout(resource.Timeout).SetCustomContainerConfig(new(fc.CustomContainerConfig).
-					SetImage(resource.Image)).SetEnvironmentVariables(resource.Env)); err != nil {
+				new(fc.UpdateFunctionRequest).SetRuntime(config.ConfigGlobal.Runtime).
+					SetMemorySize(resource.MemorySize).SetCpu(resource.CPU).
+					SetTimeout(resource.Timeout).SetEnvironmentVariables(resource.Env)); err != nil {
 				fail = append(fail, functionName)
 				errs = append(errs, err.Error())
 
@@ -286,6 +277,18 @@ func (f *FuncManager) getEndpointFromDb(key string) (string, error) {
 }
 
 func (f *FuncManager) createFunc(key, sdModel string, env map[string]*string) (string, error) {
+	// download sd code from oss
+	f.once.Do(func() {
+		code, err := OssGlobal.DownloadFileToBase64(config.ConfigGlobal.Code)
+		if err != nil {
+			// retry
+			code, _ = OssGlobal.DownloadFileToBase64(config.ConfigGlobal.Code)
+		}
+		f.sdCode = code
+	})
+	if f.sdCode == nil {
+		return "", errors.New("not get sd code from oss")
+	}
 	functionName := GetFunctionName(key)
 	var endpoint string
 	var err error
@@ -326,24 +329,18 @@ func (f *FuncManager) GetFuncResource(functionName string) *FuncResource {
 		case *fc.GetFunctionResponse:
 			info := funcBody.(*fc.GetFunctionResponse)
 			return &FuncResource{
-				Image:         *info.Body.CustomContainerConfig.Image,
-				CPU:           *info.Body.Cpu,
-				MemorySize:    *info.Body.MemorySize,
-				GpuMemorySize: *info.Body.GpuMemorySize,
-				Timeout:       *info.Body.Timeout,
-				InstanceType:  *info.Body.InstanceType,
-				Env:           info.Body.EnvironmentVariables,
+				CPU:        *info.Body.Cpu,
+				MemorySize: *info.Body.MemorySize,
+				Timeout:    *info.Body.Timeout,
+				Env:        info.Body.EnvironmentVariables,
 			}
 		case *fc3.GetFunctionResponse:
 			info := funcBody.(*fc3.GetFunctionResponse)
 			return &FuncResource{
-				Image:         *info.Body.CustomContainerConfig.Image,
-				CPU:           *info.Body.Cpu,
-				MemorySize:    *info.Body.MemorySize,
-				GpuMemorySize: *info.Body.GpuConfig.GpuMemorySize,
-				Timeout:       *info.Body.Timeout,
-				InstanceType:  *info.Body.GpuConfig.GpuType,
-				Env:           info.Body.EnvironmentVariables,
+				CPU:        *info.Body.Cpu,
+				MemorySize: *info.Body.MemorySize,
+				Timeout:    *info.Body.Timeout,
+				Env:        info.Body.EnvironmentVariables,
 			}
 		}
 	}
@@ -373,27 +370,14 @@ func (f *FuncManager) loadFunc() {
 	for _, data := range funcAll {
 		key := data[datastore.KModelServiceKey].(string)
 		sdModel := data[datastore.KModelServiceSdModel].(string)
-		// check fc && db match
-		functionName := GetFunctionName(sdModel)
-		if f.GetFcFunc(functionName) == nil {
-			logrus.Errorf("functionName:%s, sdModel:%s function in db, not in FC, auto delete ots table fucntion "+
-				"key=%s", functionName, sdModel, sdModel)
-			// function in db not in FC， del ots data
-			f.funcStore.Delete(sdModel)
-			continue
-		}
-		//image := data[datastore.KModelServerImage].(string)
-		//if image != "" && config.ConfigGlobal.Image != "" &&
-		//	image != config.ConfigGlobal.Image {
-		//	// update function image
-		//	if err := f.UpdateFunctionImage(key); err != nil {
-		//		logrus.Info("update function image err=", err.Error())
-		//	}
-		//	// update db
-		//	f.funcStore.Update(key, map[string]interface{}{
-		//		datastore.KModelServerImage: config.ConfigGlobal.Image,
-		//		datastore.KModelModifyTime:  fmt.Sprintf("%d", utils.TimestampS()),
-		//	})
+		//// check fc && db match
+		//functionName := GetFunctionName(sdModel)
+		//if f.GetFcFunc(functionName) == nil {
+		//	logrus.Errorf("functionName:%s, sdModel:%s function in db, not in FC, auto delete ots table fucntion "+
+		//		"key=%s", functionName, sdModel, sdModel)
+		//	// function in db not in FC， del ots data
+		//	f.funcStore.Delete(sdModel)
+		//	continue
 		//}
 		endpoint := data[datastore.KModelServiceEndPoint].(string)
 		// init lastInvokeEndpoint
@@ -445,21 +429,16 @@ func (f *FuncManager) ListFunction() *project.T {
 
 func GetHttpTrigger(functionName string) string {
 	if isFc3() {
-		if result, err := FuncManagerGlobal.fc3Client.ListTriggers(&functionName, new(fc3.ListTriggersRequest)); err == nil {
-			for _, trigger := range result.Body.Triggers {
-				if trigger.HttpTrigger != nil {
-					return *trigger.HttpTrigger.UrlInternet
-				}
-			}
+		if _, err := FuncManagerGlobal.fc3Client.ListTriggers(&functionName, new(fc3.ListTriggersRequest)); err == nil {
+			return fmt.Sprintf("http://%s.%s.fc.aliyuncs.com/2016-08-15/proxy/%s.LATEST/%s", config.ConfigGlobal.AccountId,
+				config.ConfigGlobal.GetRegion(), config.ConfigGlobal.ServiceName, functionName)
+
 		}
 	} else {
-		if result, err := FuncManagerGlobal.fcClient.ListTriggers(&config.ConfigGlobal.ServiceName,
+		if _, err := FuncManagerGlobal.fcClient.ListTriggers(&config.ConfigGlobal.ServiceName,
 			&functionName, new(fc.ListTriggersRequest)); err == nil {
-			for _, trigger := range result.Body.Triggers {
-				if trigger.UrlInternet != nil {
-					return *trigger.UrlInternet
-				}
-			}
+			return fmt.Sprintf("http://%s.%s.fc.aliyuncs.com/2016-08-15/proxy/%s.LATEST/%s", config.ConfigGlobal.AccountId,
+				config.ConfigGlobal.GetRegion(), config.ConfigGlobal.ServiceName, functionName)
 		}
 	}
 	return ""
@@ -480,11 +459,13 @@ func (f *FuncManager) createFCFunction(serviceName, functionName string,
 	}
 	// create http triggers
 	httpTriggerRequest := getHttpTrigger()
-	resp, err := f.fcClient.CreateTrigger(&serviceName, &functionName, httpTriggerRequest)
+	_, err = f.fcClient.CreateTrigger(&serviceName, &functionName, httpTriggerRequest)
 	if err != nil {
 		return "", err
 	}
-	return *(resp.Body.UrlInternet), nil
+	return fmt.Sprintf("http://%s.%s.fc.aliyuncs.com/2016-08-15/proxy/%s.LATEST/%s", config.ConfigGlobal.AccountId,
+		config.ConfigGlobal.GetRegion(), config.ConfigGlobal.ServiceName, functionName), nil
+	//return *(resp.Body.UrlInternet), nil
 
 }
 
@@ -492,41 +473,16 @@ func (f *FuncManager) createFCFunction(serviceName, functionName string,
 func getCreateFuncRequest(functionName string, env map[string]*string) *fc.CreateFunctionRequest {
 	defaultReq := &fc.CreateFunctionRequest{
 		FunctionName:         utils.String(functionName),
-		CaPort:               utils.Int32(config.ConfigGlobal.CAPort),
+		Runtime:              utils.String(config.ConfigGlobal.Runtime),
 		Cpu:                  utils.Float32(config.ConfigGlobal.CPU),
 		Timeout:              utils.Int32(config.ConfigGlobal.Timeout),
-		InstanceType:         utils.String(config.ConfigGlobal.InstanceType),
-		Runtime:              utils.String("custom-container"),
 		InstanceConcurrency:  utils.Int32(config.ConfigGlobal.InstanceConcurrency),
 		MemorySize:           utils.Int32(config.ConfigGlobal.MemorySize),
 		DiskSize:             utils.Int32(config.ConfigGlobal.DiskSize),
-		Handler:              utils.String("index.handler"),
-		GpuMemorySize:        utils.Int32(config.ConfigGlobal.GpuMemorySize),
+		Handler:              utils.String(config.ConfigGlobal.Handler),
 		EnvironmentVariables: env,
-		CustomContainerConfig: &fc.CustomContainerConfig{
-			Command:          utils.String("/docker/entrypoint.sh"),
-			AccelerationType: utils.String("Default"),
-			Image:            utils.String(config.ConfigGlobal.Image),
-			WebServerMode:    utils.Bool(true),
-		},
 	}
-	if sd := FuncManagerGlobal.GetSd(); sd != nil {
-		if config.ConfigGlobal.Image == "" {
-			defaultReq.CustomContainerConfig.Image = sd.CustomContainerConfig.Image
-		}
-		defaultReq.CustomContainerConfig.Command = func() *string {
-			if sd.CustomContainerConfig.Entrypoint != nil && len(sd.CustomContainerConfig.Entrypoint) > 0 {
-				return sd.CustomContainerConfig.Entrypoint[0]
-			}
-			return utils.String("")
-		}()
-		defaultReq.CustomContainerConfig.Args = func() *string {
-			if sd.CustomContainerConfig.Command != nil && len(sd.CustomContainerConfig.Command) > 0 {
-				return sd.CustomContainerConfig.Command[0]
-			}
-			return utils.String("")
-		}()
-	}
+	defaultReq.SetCode(new(fc.Code).SetZipFile(*FuncManagerGlobal.sdCode))
 	return defaultReq
 }
 
@@ -570,11 +526,13 @@ func (f *FuncManager) createFc3Function(functionName string,
 	}
 	// create http triggers
 	httpTriggerRequest := getHttpTriggerFc3()
-	resp, err := f.fc3Client.CreateTrigger(&functionName, httpTriggerRequest)
+	_, err = f.fc3Client.CreateTrigger(&functionName, httpTriggerRequest)
 	if err != nil {
 		return "", err
 	}
-	return *(resp.Body.HttpTrigger.UrlInternet), nil
+	return fmt.Sprintf("http://%s.%s.fc.aliyuncs.com/2016-08-15/proxy/%s.LATEST/%s", config.ConfigGlobal.AccountId,
+		config.ConfigGlobal.GetRegion(), config.ConfigGlobal.ServiceName, functionName), nil
+	//return *(resp.Body.HttpTrigger.UrlInternet), nil
 }
 
 // fc3.0 get create function request
@@ -586,40 +544,22 @@ func (f *FuncManager) getCreateFuncRequestFc3(functionName string, env map[strin
 	}
 	curFunction := function.(*fc3.GetFunctionResponse)
 	input := &fc3.CreateFunctionInput{
-		FunctionName:         utils.String(functionName),
-		Cpu:                  utils.Float32(config.ConfigGlobal.CPU),
-		Timeout:              utils.Int32(config.ConfigGlobal.Timeout),
-		Runtime:              utils.String("custom-container"),
-		InstanceConcurrency:  utils.Int32(config.ConfigGlobal.InstanceConcurrency),
-		MemorySize:           utils.Int32(config.ConfigGlobal.MemorySize),
-		DiskSize:             utils.Int32(config.ConfigGlobal.DiskSize),
+		FunctionName:        utils.String(functionName),
+		Cpu:                 utils.Float32(config.ConfigGlobal.CPU),
+		Timeout:             utils.Int32(config.ConfigGlobal.Timeout),
+		Runtime:             utils.String(config.ConfigGlobal.Runtime),
+		InstanceConcurrency: utils.Int32(config.ConfigGlobal.InstanceConcurrency),
+		MemorySize:          utils.Int32(config.ConfigGlobal.MemorySize),
+		DiskSize:            utils.Int32(config.ConfigGlobal.DiskSize),
+		Code: &fc3.InputCodeLocation{
+			ZipFile: FuncManagerGlobal.sdCode,
+		},
 		EnvironmentVariables: env,
-		Handler:              utils.String("index.handler"),
-		CustomContainerConfig: &fc3.CustomContainerConfig{
-			Entrypoint:       []*string{utils.String("/docker/entrypoint.sh")},
-			AccelerationType: utils.String("Default"),
-			Image:            utils.String(config.ConfigGlobal.Image),
-			Port:             utils.Int32(config.ConfigGlobal.CAPort),
-		},
-		GpuConfig: &fc3.GPUConfig{
-			GpuMemorySize: utils.Int32(config.ConfigGlobal.GpuMemorySize),
-			GpuType:       utils.String(config.ConfigGlobal.InstanceType),
-		},
-		Role:           curFunction.Body.Role,
-		VpcConfig:      curFunction.Body.VpcConfig,
-		NasConfig:      curFunction.Body.NasConfig,
-		OssMountConfig: curFunction.Body.OssMountConfig,
-	}
-	if sd := FuncManagerGlobal.GetSd(); sd != nil {
-		if config.ConfigGlobal.Image == "" {
-			input.CustomContainerConfig.Image = sd.CustomContainerConfig.Image
-		}
-		if sd.CustomContainerConfig.Entrypoint != nil && len(sd.CustomContainerConfig.Entrypoint) > 0 {
-			input.CustomContainerConfig.Entrypoint = sd.CustomContainerConfig.Entrypoint
-		}
-		if sd.CustomContainerConfig.Command != nil && len(sd.CustomContainerConfig.Command) > 0 {
-			input.CustomContainerConfig.Command = sd.CustomContainerConfig.Command
-		}
+		Handler:              utils.String(config.ConfigGlobal.Handler),
+		Role:                 curFunction.Body.Role,
+		VpcConfig:            curFunction.Body.VpcConfig,
+		NasConfig:            curFunction.Body.NasConfig,
+		OssMountConfig:       curFunction.Body.OssMountConfig,
 	}
 	return &fc3.CreateFunctionRequest{
 		Request: input,
@@ -668,6 +608,9 @@ func getEnv(sdModel string) map[string]*string {
 		config.MODEL_REFRESH_SIGNAL: utils.String(fmt.Sprintf("%d", utils.TimestampS())), // value = now timestamp
 		config.OTS_INSTANCE:         utils.String(config.ConfigGlobal.OtsInstanceName),
 		config.OTS_ENDPOINT:         utils.String(config.ConfigGlobal.OtsEndpoint),
+		config.SERVER_NAME:          utils.String(config.AGENT),
+		config.ACCESS_KEY_ID:        utils.String(config.ConfigGlobal.AccessKeyId),
+		config.ACCESS_KEY_SECRET:    utils.String(config.ConfigGlobal.AccessKeySecret),
 	}
 	if config.ConfigGlobal.OssMode == config.REMOTE {
 		env[config.OSS_ENDPOINT] = utils.String(config.ConfigGlobal.OssEndpoint)
@@ -677,11 +620,9 @@ func getEnv(sdModel string) map[string]*string {
 }
 
 func getFC3UpdateFunctionRequest(resource *FuncResource) *fc3.UpdateFunctionRequest {
-	req := new(fc3.UpdateFunctionInput).SetRuntime("custom-container").
-		SetMemorySize(resource.MemorySize).SetCpu(resource.CPU).SetGpuConfig(new(fc3.GPUConfig).
-		SetGpuType(resource.InstanceType).SetGpuMemorySize(resource.GpuMemorySize)).
-		SetTimeout(resource.Timeout).SetCustomContainerConfig(new(fc3.CustomContainerConfig).
-		SetImage(resource.Image)).SetEnvironmentVariables(resource.Env)
+	req := new(fc3.UpdateFunctionInput).SetRuntime(config.ConfigGlobal.Runtime).
+		SetMemorySize(resource.MemorySize).SetCpu(resource.CPU).
+		SetTimeout(resource.Timeout).SetEnvironmentVariables(resource.Env)
 	if resource.VpcConfig != nil {
 		vpcConfig := &fc3.VPCConfig{}
 		if err := utils.MapToStruct(*resource.VpcConfig, vpcConfig); err == nil {

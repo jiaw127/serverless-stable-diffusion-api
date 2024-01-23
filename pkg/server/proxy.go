@@ -49,13 +49,12 @@ func NewProxyServer(port string, dbType datastore.DatastoreType, mode string) (*
 		logrus.Errorf("func manage init error %v", err)
 		return nil, err
 	}
-	if config.ConfigGlobal.IsServerTypeMatch(config.CONTROL) {
-		// init listen event
-		listenTask := module.NewListenDbTask(config.ConfigGlobal.ListenInterval, taskDataStore, modelDataStore,
-			configDataStore)
-		// add config listen task
-		listenTask.AddTask("configTask", module.ConfigListen, module.ConfigEvent)
-	}
+	// init listen event
+	//listenTask := module.NewListenDbTask(config.ConfigGlobal.ListenInterval, taskDataStore, modelDataStore,
+	//	configDataStore)
+	// add config listen task
+	//listenTask.AddTask("configTask", module.ConfigListen, module.ConfigEvent)
+
 	// init handler
 	proxyHandler := handler.NewProxyHandler(taskDataStore, modelDataStore, userDataStore,
 		configDataStore, funcDataStore)

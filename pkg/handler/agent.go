@@ -700,7 +700,25 @@ func (a *AgentHandler) ListSdFunc(c *gin.Context) {
 
 // DelSDFunc delete sd function
 // (POST /del/sd/functions)
-func (p *AgentHandler) DelSDFunc(c *gin.Context) {
+func (a *AgentHandler) DelSDFunc(c *gin.Context) {
+	c.String(http.StatusNotFound, "api not support")
+}
+
+// RegisterFunction register sdapi function
+// (POST /register/sdapi/function)
+func (a *AgentHandler) RegisterFunction(c *gin.Context) {
+	c.String(http.StatusNotFound, "api not support")
+}
+
+// UpdateFunction update sdapi function
+// (POST /update/sdapi/function)
+func (a *AgentHandler) UpdateFunction(c *gin.Context) {
+	c.String(http.StatusNotFound, "api not support")
+}
+
+// DelFunction delete sdapi function
+// (POST /delete/sdapi/function)
+func (a *AgentHandler) DelFunction(c *gin.Context) {
 	c.String(http.StatusNotFound, "api not support")
 }
 
@@ -777,9 +795,11 @@ func (a *AgentHandler) NoRouterAgentHandler(c *gin.Context) {
 			return
 		}
 	}
+	replacePath := fmt.Sprintf("/2016-08-15/proxy/%s.LATEST/%s",
+		config.ConfigGlobal.ServiceName, config.ConfigGlobal.FunctionName)
+	urlPath := strings.Replace(c.Request.URL.String(), replacePath, "", 1)
 	req, err := http.NewRequest(c.Request.Method,
-		fmt.Sprintf("%s%s", config.ConfigGlobal.SdUrlPrefix,
-			c.Request.URL.String()), bytes.NewBuffer(body))
+		fmt.Sprintf("%s%s", config.ConfigGlobal.SdUrlPrefix, urlPath), bytes.NewBuffer(body))
 	if err != nil {
 		c.String(http.StatusInternalServerError, err.Error())
 		return

@@ -22,7 +22,7 @@ type ConfigYaml struct {
 	// oss
 	OssEndpoint string `yaml:"ossEndpoint"`
 	Bucket      string `yaml:"bucket"`
-	OssPath     string `yaml:"ossPath""`
+	OssPath     string `yaml:"ossPath"`
 	OssMode     string `yaml:"ossMode"`
 
 	// db
@@ -32,16 +32,15 @@ type ConfigYaml struct {
 	ListenInterval int32 `yaml:"listenInterval"`
 
 	// function
-	Image               string  `yaml:"image"`
-	CAPort              int32   `yaml:"caPort"`
 	Timeout             int32   `yaml:"timeout"`
+	Runtime             string  `yaml:"runtime"`
 	CPU                 float32 `yaml:"CPU"`
-	GpuMemorySize       int32   `yaml:"gpuMemorySize"`
 	ExtraArgs           string  `yaml:"extraArgs"`
 	DiskSize            int32   `yaml:"diskSize"`
 	MemorySize          int32   `yaml:"memorySize"`
 	InstanceConcurrency int32   `yaml:"instanceConcurrency"`
-	InstanceType        string  `yaml:"instanceType"`
+	Code                string  `yaml:"code"`
+	Handler             string  `yaml:"handler"`
 
 	// user
 	SessionExpire             int64  `yaml:"sessionExpire"`
@@ -74,6 +73,7 @@ type ConfigEnv struct {
 	AccountId            string
 	AccessKeyId          string
 	AccessKeySecret      string
+	SdRegion             string
 	Region               string
 	ServiceName          string
 	FunctionName         string
@@ -84,6 +84,13 @@ type ConfigEnv struct {
 type Config struct {
 	ConfigYaml
 	ConfigEnv
+}
+
+func (c *Config) GetRegion() string {
+	if c.SdRegion != "" {
+		return c.SdRegion
+	}
+	return c.Region
 }
 
 func (c *Config) SendLogToRemote() bool {
@@ -170,18 +177,6 @@ func (c *Config) updateFromEnv() {
 		c.UseLocalModels = useLocalModel
 	}
 
-	// sd image cover
-	sdImage := os.Getenv(SD_IMAGE)
-	if sdImage != "" {
-		c.Image = sdImage
-	}
-	gpuMemorySize := os.Getenv(GPU_MEMORY_SIZE)
-	if gpuMemorySize != "" {
-		if size, err := strconv.Atoi(gpuMemorySize); err == nil {
-			c.GpuMemorySize = int32(size)
-		}
-	}
-
 	// flex mode
 	flexMode := os.Getenv(FLEX_MODE)
 	if flexMode != "" {
@@ -228,6 +223,11 @@ func (c *Config) updateFromEnv() {
 	if disableHealthCheck != "" {
 		c.DisableHealthCheck = disableHealthCheck
 	}
+
+	sdOssCode := os.Getenv(SD_OSS_CODE)
+	if sdOssCode != "" {
+		c.Code = sdOssCode
+	}
 }
 
 // check config valid
@@ -242,11 +242,10 @@ func (c *Config) check() error {
 	if strings.Contains(c.ExtraArgs, "--api-auth") {
 		c.ExtraArgs = strings.ReplaceAll(c.ExtraArgs, "--api-auth", "")
 	}
-	if (c.ServerName == CONTROL || c.ServerName == AGENT) && c.OssMode == REMOTE {
-		if c.Bucket == "" || c.OssEndpoint == "" {
-			logrus.Error("oss remote mode need set oss bucket and endpoint, please check it")
-			return errors.New("oss remote mode need set oss bucket and endpoint, please check it")
-		}
+	if c.OssMode == REMOTE && c.Bucket == "" || c.OssEndpoint == "" {
+		logrus.Error("oss remote mode need set oss bucket and endpoint, please check it")
+		return errors.New("oss remote mode need set oss bucket and endpoint, please check it")
+
 	}
 	return nil
 }
@@ -280,18 +279,12 @@ func (c *Config) setDefaults() {
 	if c.OssPath == "" {
 		c.OssPath = DefaultOssPath
 	}
-	if c.LogRemoteService == "" {
-		c.LogRemoteService = DefaultLogService
-	}
 	if c.SdPath == "" {
 		if os.Getenv(SERVER_NAME) == PROXY || os.Getenv(SERVER_NAME) == CONTROL {
 			c.SdPath = DefaultSdPathProxy
 		} else {
 			c.SdPath = DefaultSdPath
 		}
-	}
-	if c.CAPort == 0 {
-		c.CAPort = DefaultCaPort
 	}
 	if c.CPU == 0 {
 		c.CPU = DefaultCpu
@@ -302,14 +295,14 @@ func (c *Config) setDefaults() {
 	if c.InstanceConcurrency == 0 {
 		c.InstanceConcurrency = DefaultInstanceConcurrency
 	}
-	if c.InstanceType == "" {
-		c.InstanceType = DefaultInstanceType
+	if c.Runtime == "" {
+		c.Runtime = DefaultRuntime
 	}
 	if c.MemorySize == 0 {
 		c.MemorySize = DefaultMemorySize
 	}
-	if c.GpuMemorySize == 0 {
-		c.GpuMemorySize = DefaultGpuMemorySize
+	if c.Handler == "" {
+		c.Handler = DefaultHandler
 	}
 	if c.Timeout == 0 {
 		c.Timeout = DefaultTimeout
@@ -324,6 +317,7 @@ func InitConfig(fn string) error {
 	configEnv.AccountId = os.Getenv(ACCOUNT_ID)
 	configEnv.AccessKeyId = os.Getenv(ACCESS_KEY_ID)
 	configEnv.AccessKeySecret = os.Getenv(ACCESS_KEY_SECRET)
+	configEnv.SdRegion = os.Getenv(SD_REGION)
 	configEnv.Region = os.Getenv(REGION)
 	configEnv.ServiceName = os.Getenv(SERVICE_NAME)
 	configEnv.FunctionName = os.Getenv(FC_FUNCTION_NAME)
@@ -349,14 +343,11 @@ func InitConfig(fn string) error {
 	if !ConfigGlobal.ExposeToUser() {
 		// check valid
 		for _, val := range []string{configEnv.AccountId, configEnv.AccessKeyId,
-			configEnv.AccessKeySecret, configEnv.Region} {
+			configEnv.AccessKeySecret, configEnv.Region, ConfigGlobal.Code} {
 			if val == "" {
 				return errors.New("env not set ACCOUNT_ID || ACCESS_KEY_Id || " +
-					"ACCESS_KEY_SECRET || REGION, please check")
+					"ACCESS_KEY_SECRET || REGION || sd_code, please check")
 			}
-		}
-		if ConfigGlobal.GetFlexMode() == MultiFunc && ConfigGlobal.ServerName == PROXY && ConfigGlobal.Downstream == "" {
-			return errors.New("proxy need set downstream")
 		}
 		if err := ConfigGlobal.check(); err != nil {
 			return err

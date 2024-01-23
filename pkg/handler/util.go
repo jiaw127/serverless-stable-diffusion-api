@@ -295,11 +295,6 @@ func updateFuncResource(request *models.BatchUpdateSdResourceRequest,
 	res *module.FuncResource) (*module.FuncResource, error) {
 	isDiff := false
 	// update resource
-	// image
-	if request.Image != nil && *request.Image != "" && *request.Image != res.Image {
-		res.Image = *request.Image
-		isDiff = true
-	}
 	// cpu
 	if request.Cpu != nil && *request.Cpu > 0 && *request.Cpu != res.CPU {
 		res.CPU = *request.Cpu
@@ -320,19 +315,9 @@ func updateFuncResource(request *models.BatchUpdateSdResourceRequest,
 		res.Env["EXTRA_ARGS"] = request.ExtraArgs
 		isDiff = true
 	}
-	// gpuMemorySize
-	if request.GpuMemorySize != nil && *request.GpuMemorySize > 0 && *request.GpuMemorySize != res.GpuMemorySize {
-		res.GpuMemorySize = *request.GpuMemorySize
-		isDiff = true
-	}
 	// MemorySize
 	if request.MemorySize != nil && *request.MemorySize > 0 && *request.MemorySize != res.MemorySize {
 		res.MemorySize = *request.MemorySize
-		isDiff = true
-	}
-	// instanceType
-	if request.InstanceType != nil && *request.InstanceType != "" && *request.InstanceType != res.InstanceType {
-		res.InstanceType = *request.InstanceType
 		isDiff = true
 	}
 	// timeout

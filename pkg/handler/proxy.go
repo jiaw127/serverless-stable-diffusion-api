@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/devsapp/serverless-stable-diffusion-api/pkg/client"
-	"github.com/devsapp/serverless-stable-diffusion-api/pkg/concurrency"
 	"github.com/devsapp/serverless-stable-diffusion-api/pkg/config"
 	"github.com/devsapp/serverless-stable-diffusion-api/pkg/datastore"
 	"github.com/devsapp/serverless-stable-diffusion-api/pkg/models"
@@ -18,8 +17,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"strings"
 )
 
@@ -76,31 +73,12 @@ func (p *ProxyHandler) Login(c *gin.Context) {
 // Restart restart webui api server
 // (POST /restart)
 func (p *ProxyHandler) Restart(c *gin.Context) {
-	if config.ConfigGlobal.IsServerTypeMatch(config.PROXY) {
-		//retransmission to control
-		target := config.ConfigGlobal.Downstream
-		remote, err := url.Parse(target)
-		if err != nil {
-			panic(err)
-		}
-		proxy := httputil.NewSingleHostReverseProxy(remote)
-		proxy.Director = func(req *http.Request) {
-			req.Header = c.Request.Header
-			req.Host = remote.Host
-			req.URL.Scheme = remote.Scheme
-			req.URL.Host = remote.Host
-		}
-		proxy.ServeHTTP(c.Writer, c.Request)
-	} else if config.ConfigGlobal.IsServerTypeMatch(config.CONTROL) {
-		// update agent env
-		err := module.FuncManagerGlobal.UpdateAllFunctionEnv()
-		if err != nil {
-			handleError(c, http.StatusInternalServerError, "update function env error")
-		}
-		c.JSON(http.StatusOK, gin.H{"message": "success"})
-	} else {
-		c.JSON(http.StatusNotFound, gin.H{"message": "not support"})
+	// update agent env
+	err := module.FuncManagerGlobal.UpdateAllFunctionEnv()
+	if err != nil {
+		handleError(c, http.StatusInternalServerError, "update function env error")
 	}
+	c.JSON(http.StatusOK, gin.H{"message": "success"})
 }
 
 // ListSdFunc get sdapi function
@@ -437,7 +415,7 @@ func (p *ProxyHandler) ExtraImages(c *gin.Context) {
 
 	endPoint := config.ConfigGlobal.Downstream
 	var err error
-	if config.ConfigGlobal.IsServerTypeMatch(config.CONTROL) {
+	if endPoint == "" {
 		if endPoint = module.FuncManagerGlobal.GetLastInvokeEndpoint(request.StableDiffusionModel); endPoint == "" {
 			handleError(c, http.StatusInternalServerError, "not found valid endpoint")
 			return
@@ -522,20 +500,18 @@ func (p *ProxyHandler) Txt2Img(c *gin.Context) {
 	}
 	c.Writer.Header().Set("taskId", taskId)
 
-	endPoint := config.ConfigGlobal.Downstream
 	var err error
 	version := c.GetHeader(versionKey)
-	if config.ConfigGlobal.IsServerTypeMatch(config.CONTROL) {
+	// check request valid: sdModel and sdVae exist
+	if existed := p.checkModelExist(request.StableDiffusionModel); !existed {
+		handleError(c, http.StatusNotFound, "model not found, please check request")
+		return
+	}
+	endPoint := config.ConfigGlobal.Downstream
+	if config.ConfigGlobal.Downstream == "" {
 		// get endPoint
 		sdModel := request.StableDiffusionModel
 		c.Writer.Header().Set("model", sdModel)
-		// wait to valid
-		if concurrency.ConCurrencyGlobal.WaitToValid(sdModel) {
-			// cold start
-			logrus.WithFields(logrus.Fields{"taskId": taskId}).Infof("sd %s cold start ....", sdModel)
-			defer concurrency.ConCurrencyGlobal.DecColdNum(sdModel, taskId)
-		}
-		defer concurrency.ConCurrencyGlobal.DoneTask(sdModel, taskId)
 		endPoint, err = module.FuncManagerGlobal.GetEndpoint(sdModel)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, models.SubmitTaskResponse{
@@ -545,49 +521,51 @@ func (p *ProxyHandler) Txt2Img(c *gin.Context) {
 			})
 			return
 		}
-	}
-	if config.ConfigGlobal.IsServerTypeMatch(config.PROXY) {
-		// check request valid: sdModel and sdVae exist
-		if existed := p.checkModelExist(request.StableDiffusionModel); !existed {
-			handleError(c, http.StatusNotFound, "model not found, please check request")
-			return
-		}
-		// write db
-		if err := p.taskStore.Put(taskId, map[string]interface{}{
-			datastore.KTaskIdColumnName: taskId,
-			datastore.KTaskUser:         username,
-			datastore.KTaskStatus:       config.TASK_QUEUE,
-			datastore.KTaskCancel:       int64(config.CANCEL_INIT),
-			datastore.KTaskCreateTime:   fmt.Sprintf("%d", utils.TimestampS()),
-		}); err != nil {
-			logrus.WithFields(logrus.Fields{"taskId": taskId}).Errorf("put db err=%s", err.Error())
+		if endPoint == "" {
 			c.JSON(http.StatusInternalServerError, models.SubmitTaskResponse{
 				TaskId:  taskId,
 				Status:  config.TASK_FAILED,
-				Message: utils.String(config.OTSPUTERROR),
+				Message: utils.String(fmt.Sprintf("sdModel %s not get endpoint, please register", sdModel)),
 			})
 			return
 		}
+	}
+	// write db
+	if err := p.taskStore.Put(taskId, map[string]interface{}{
+		datastore.KTaskIdColumnName: taskId,
+		datastore.KTaskUser:         username,
+		datastore.KTaskStatus:       config.TASK_QUEUE,
+		datastore.KTaskCancel:       int64(config.CANCEL_INIT),
+		datastore.KTaskCreateTime:   fmt.Sprintf("%d", utils.TimestampS()),
+	}); err != nil {
+		logrus.WithFields(logrus.Fields{"taskId": taskId}).Errorf("put db err=%s", err.Error())
+		c.JSON(http.StatusInternalServerError, models.SubmitTaskResponse{
+			TaskId:  taskId,
+			Status:  config.TASK_FAILED,
+			Message: utils.String(config.OTSPUTERROR),
+		})
+		return
+	}
 
-		// get user current config version
-		userItem, err := p.userStore.Get(username, []string{datastore.KUserConfigVer})
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, models.SubmitTaskResponse{
-				TaskId:  taskId,
-				Status:  config.TASK_FAILED,
-				Message: utils.String(config.OTSGETERROR),
-			})
-			logrus.WithFields(logrus.Fields{"taskId": taskId}).Errorf("get config version err=%s", err.Error())
-			return
-		}
-		version = func() string {
-			if version, ok := userItem[datastore.KUserConfigVer]; !ok {
-				return "-1"
-			} else {
-				return version.(string)
-			}
-		}()
+	// get user current config version
+	userItem, err := p.userStore.Get(username, []string{datastore.KUserConfigVer})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.SubmitTaskResponse{
+			TaskId:  taskId,
+			Status:  config.TASK_FAILED,
+			Message: utils.String(config.OTSGETERROR),
+		})
+		logrus.WithFields(logrus.Fields{"taskId": taskId}).Errorf("get config version err=%s", err.Error())
+		return
 	}
+	version = func() string {
+		if version, ok := userItem[datastore.KUserConfigVer]; !ok {
+			return "-1"
+		} else {
+			return version.(string)
+		}
+	}()
+
 	ctx, cancel := context.WithTimeout(context.Background(), config.HTTPTIMEOUT)
 	defer cancel()
 	// get client by endPoint
@@ -651,20 +629,20 @@ func (p *ProxyHandler) Img2Img(c *gin.Context) {
 	}
 	c.Writer.Header().Set("taskId", taskId)
 
+	// check request valid: sdModel and sdVae exist
+	if existed := p.checkModelExist(request.StableDiffusionModel); !existed {
+		handleError(c, http.StatusNotFound, "model not found, please check request")
+		return
+	}
+
 	endPoint := config.ConfigGlobal.Downstream
 	var err error
 	version := c.GetHeader(versionKey)
-	if config.ConfigGlobal.IsServerTypeMatch(config.CONTROL) {
+	if endPoint == "" {
 		// get endPoint
 		sdModel := request.StableDiffusionModel
 		c.Writer.Header().Set("model", sdModel)
-		// wait to valid
-		if concurrency.ConCurrencyGlobal.WaitToValid(sdModel) {
-			// cold start
-			logrus.WithFields(logrus.Fields{"taskId": taskId}).Infof("sd %s cold start ....", sdModel)
-			defer concurrency.ConCurrencyGlobal.DecColdNum(sdModel, taskId)
-		}
-		defer concurrency.ConCurrencyGlobal.DoneTask(sdModel, taskId)
+
 		endPoint, err = module.FuncManagerGlobal.GetEndpoint(sdModel)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, models.SubmitTaskResponse{
@@ -674,49 +652,51 @@ func (p *ProxyHandler) Img2Img(c *gin.Context) {
 			})
 			return
 		}
-	}
-	if config.ConfigGlobal.IsServerTypeMatch(config.PROXY) {
-		// check request valid: sdModel and sdVae exist
-		if existed := p.checkModelExist(request.StableDiffusionModel); !existed {
-			handleError(c, http.StatusNotFound, "model not found, please check request")
-			return
-		}
-		// write db
-		if err := p.taskStore.Put(taskId, map[string]interface{}{
-			datastore.KTaskIdColumnName: taskId,
-			datastore.KTaskUser:         username,
-			datastore.KTaskStatus:       config.TASK_QUEUE,
-			datastore.KTaskCancel:       int64(config.CANCEL_INIT),
-			datastore.KTaskCreateTime:   fmt.Sprintf("%d", utils.TimestampS()),
-		}); err != nil {
-			logrus.WithFields(logrus.Fields{"taskId": taskId}).Error("[Error] put db err=", err.Error())
+		if endPoint == "" {
 			c.JSON(http.StatusInternalServerError, models.SubmitTaskResponse{
 				TaskId:  taskId,
 				Status:  config.TASK_FAILED,
-				Message: utils.String(config.OTSPUTERROR),
+				Message: utils.String(fmt.Sprintf("sdModel %s not get endpoint, please register", sdModel)),
 			})
 			return
 		}
+	}
+	// write db
+	if err := p.taskStore.Put(taskId, map[string]interface{}{
+		datastore.KTaskIdColumnName: taskId,
+		datastore.KTaskUser:         username,
+		datastore.KTaskStatus:       config.TASK_QUEUE,
+		datastore.KTaskCancel:       int64(config.CANCEL_INIT),
+		datastore.KTaskCreateTime:   fmt.Sprintf("%d", utils.TimestampS()),
+	}); err != nil {
+		logrus.WithFields(logrus.Fields{"taskId": taskId}).Error("[Error] put db err=", err.Error())
+		c.JSON(http.StatusInternalServerError, models.SubmitTaskResponse{
+			TaskId:  taskId,
+			Status:  config.TASK_FAILED,
+			Message: utils.String(config.OTSPUTERROR),
+		})
+		return
+	}
 
-		// get user current config version
-		userItem, err := p.userStore.Get(username, []string{datastore.KUserConfigVer})
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, models.SubmitTaskResponse{
-				TaskId:  taskId,
-				Status:  config.TASK_FAILED,
-				Message: utils.String(config.OTSGETERROR),
-			})
-			logrus.WithFields(logrus.Fields{"taskId": taskId}).Error("get config version err=", err.Error())
-			return
-		}
-		version = func() string {
-			if version, ok := userItem[datastore.KUserConfigVer]; !ok {
-				return "-1"
-			} else {
-				return version.(string)
-			}
-		}()
+	// get user current config version
+	userItem, err := p.userStore.Get(username, []string{datastore.KUserConfigVer})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.SubmitTaskResponse{
+			TaskId:  taskId,
+			Status:  config.TASK_FAILED,
+			Message: utils.String(config.OTSGETERROR),
+		})
+		logrus.WithFields(logrus.Fields{"taskId": taskId}).Error("get config version err=", err.Error())
+		return
 	}
+	version = func() string {
+		if version, ok := userItem[datastore.KUserConfigVer]; !ok {
+			return "-1"
+		} else {
+			return version.(string)
+		}
+	}()
+
 	ctx, cancel := context.WithTimeout(context.Background(), config.HTTPTIMEOUT)
 	defer cancel()
 	// get client by endPoint
@@ -767,7 +747,6 @@ func (p *ProxyHandler) DelSDFunc(c *gin.Context) {
 		handleError(c, http.StatusBadRequest, config.BADREQUEST)
 		return
 	}
-	logrus.Info(*request.Functions)
 	if fails, errs := module.FuncManagerGlobal.DeleteFunction(*request.Functions); fails != nil && len(fails) > 0 {
 		failFuncs := make([]map[string]interface{}, 0, len(fails))
 		for i, _ := range fails {
@@ -940,6 +919,145 @@ func (p *ProxyHandler) checkModelExist(sdModel string) bool {
 	return true
 }
 
+// RegisterFunction register sdapi function
+// (POST /register/sdapi/function)
+func (p *ProxyHandler) RegisterFunction(c *gin.Context) {
+	request := new(models.ModelFunctionRequest)
+	if err := getBindResult(c, request); err != nil {
+		handleError(c, http.StatusBadRequest, config.BADREQUEST)
+		return
+	}
+	// check valid
+	for _, val := range []*string{request.FunctionName, request.Model, request.Endpoint} {
+		if val == nil || *val == "" {
+			handleError(c, http.StatusBadRequest, config.BADREQUEST)
+			return
+		}
+	}
+	sdModel := *request.Model
+	// check model exist
+	if data, err := p.functionStore.Get(sdModel, []string{datastore.KModelServiceSdModel}); err != nil {
+		handleError(c, http.StatusInternalServerError, err.Error())
+		return
+	} else if data != nil && len(data) > 0 {
+		c.JSON(http.StatusBadRequest, models.ModelFunctionResponse{
+			Status:  utils.String("fail"),
+			Message: utils.String(fmt.Sprintf("model=%s exist, please check", sdModel)),
+		})
+		return
+	}
+	// store db
+	if err := p.functionStore.Put(sdModel, map[string]interface{}{
+		datastore.KModelServiceKey:            sdModel,
+		datastore.KModelServiceSdModel:        sdModel,
+		datastore.KModelServiceFunctionName:   *request.FunctionName,
+		datastore.KModelServiceEndPoint:       *request.Endpoint,
+		datastore.KModelServiceCreateTime:     fmt.Sprintf("%d", utils.TimestampS()),
+		datastore.KModelServiceLastModifyTime: fmt.Sprintf("%d", utils.TimestampS()),
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, models.ModelFunctionResponse{
+			Status:  utils.String("fail"),
+			Message: utils.String(fmt.Sprintf("model=%s store db fail:%s", sdModel, err.Error())),
+		})
+	} else {
+		c.JSON(http.StatusOK, models.ModelFunctionResponse{
+			Status: utils.String("success"),
+		})
+	}
+}
+
+// UpdateFunction update sdapi function
+// (POST /update/sdapi/function)
+func (p *ProxyHandler) UpdateFunction(c *gin.Context) {
+	request := new(models.ModelFunctionRequest)
+	if err := getBindResult(c, request); err != nil {
+		handleError(c, http.StatusBadRequest, config.BADREQUEST)
+		return
+	}
+	// check valid
+	for _, val := range []*string{request.FunctionName, request.Model, request.Endpoint} {
+		if val == nil || *val == "" {
+			handleError(c, http.StatusBadRequest, config.BADREQUEST)
+			return
+		}
+	}
+	sdModel := *request.Model
+	// check model exist
+	if data, err := p.functionStore.Get(sdModel, []string{datastore.KModelServiceSdModel}); err != nil {
+		handleError(c, http.StatusInternalServerError, err.Error())
+		return
+	} else if data == nil || len(data) == 0 {
+		c.JSON(http.StatusBadRequest, models.ModelFunctionResponse{
+			Status:  utils.String("fail"),
+			Message: utils.String(fmt.Sprintf("model=%s not exist, please check", sdModel)),
+		})
+		return
+	}
+	// store db
+	if err := p.functionStore.Update(sdModel, map[string]interface{}{
+		datastore.KModelServiceFunctionName:   *request.FunctionName,
+		datastore.KModelServiceEndPoint:       *request.Endpoint,
+		datastore.KModelServiceLastModifyTime: fmt.Sprintf("%d", utils.TimestampS()),
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, models.ModelFunctionResponse{
+			Status:  utils.String("fail"),
+			Message: utils.String(fmt.Sprintf("model=%s store db fail:%s", sdModel, err.Error())),
+		})
+	} else {
+		c.JSON(http.StatusOK, models.ModelFunctionResponse{
+			Status: utils.String("success"),
+		})
+	}
+}
+
+// DelFunction delete sdapi function
+// (POST /delete/sdapi/function)
+func (p *ProxyHandler) DelFunction(c *gin.Context) {
+	request := new(models.ModelFunctionRequest)
+	if err := getBindResult(c, request); err != nil {
+		handleError(c, http.StatusBadRequest, config.BADREQUEST)
+		return
+	}
+	// check valid
+	for _, val := range []*string{request.FunctionName, request.Model, request.Endpoint} {
+		if val == nil || *val == "" {
+			handleError(c, http.StatusBadRequest, config.BADREQUEST)
+			return
+		}
+	}
+	sdModel := *request.Model
+	// check model exist
+	if data, err := p.functionStore.Get(sdModel, []string{datastore.KModelServiceSdModel,
+		datastore.KModelServiceFunctionName, datastore.KModelServiceEndPoint}); err != nil {
+		handleError(c, http.StatusInternalServerError, err.Error())
+		return
+	} else if data == nil || len(data) != 3 {
+		c.JSON(http.StatusBadRequest, models.ModelFunctionResponse{
+			Status:  utils.String("fail"),
+			Message: utils.String(fmt.Sprintf("model=%s not exist, please check", sdModel)),
+		})
+		return
+	} else if *request.FunctionName != data[datastore.KModelServiceFunctionName].(string) ||
+		*request.Endpoint != data[datastore.KModelServiceEndPoint].(string) {
+		c.JSON(http.StatusBadRequest, models.ModelFunctionResponse{
+			Status:  utils.String("fail"),
+			Message: utils.String(fmt.Sprintf("model=%s info not match db, please check", sdModel)),
+		})
+		return
+	}
+	// store db
+	if err := p.functionStore.Delete(sdModel); err != nil {
+		c.JSON(http.StatusInternalServerError, models.ModelFunctionResponse{
+			Status:  utils.String("fail"),
+			Message: utils.String(fmt.Sprintf("model=%s delete from db fail:%s", sdModel, err.Error())),
+		})
+	} else {
+		c.JSON(http.StatusOK, models.ModelFunctionResponse{
+			Status: utils.String("success"),
+		})
+	}
+}
+
 func convertToModelResponse(datas map[string]map[string]interface{}) []*models.ModelAttributes {
 	ret := make([]*models.ModelAttributes, 0, len(datas))
 	for _, data := range datas {
@@ -1019,7 +1137,7 @@ func (p *ProxyHandler) NoRouterHandler(c *gin.Context) {
 	sdModel := ""
 	body, _ := io.ReadAll(c.Request.Body)
 	defer c.Request.Body.Close()
-	if config.ConfigGlobal.IsServerTypeMatch(config.CONTROL) {
+	if endPoint != "" {
 		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodDelete {
 			// extra body
 			request := make(map[string]interface{})
@@ -1033,13 +1151,13 @@ func (p *ProxyHandler) NoRouterHandler(c *gin.Context) {
 			}
 		}
 		c.Writer.Header().Set("model", sdModel)
-		// wait to valid
-		if concurrency.ConCurrencyGlobal.WaitToValid(sdModel) {
-			// cold start
-			logrus.WithFields(logrus.Fields{"taskId": taskId}).Infof("sd %s cold start ....", sdModel)
-			defer concurrency.ConCurrencyGlobal.DecColdNum(sdModel, taskId)
+		// check request valid: sdModel and sdVae exist
+		if sdModel != "" {
+			if existed := p.checkModelExist(sdModel); !existed {
+				handleError(c, http.StatusNotFound, "model not found, please check request")
+				return
+			}
 		}
-		defer concurrency.ConCurrencyGlobal.DoneTask(sdModel, taskId)
 		var err error
 		if sdModel == "" {
 			endPoint = module.FuncManagerGlobal.GetLastInvokeEndpoint(&sdModel)
@@ -1055,36 +1173,36 @@ func (p *ProxyHandler) NoRouterHandler(c *gin.Context) {
 			})
 			return
 		}
-	}
-	// proxy
-	if config.ConfigGlobal.IsServerTypeMatch(config.PROXY) {
-		// check request valid: sdModel and sdVae exist
-		if sdModel != "" {
-			if existed := p.checkModelExist(sdModel); !existed {
-				handleError(c, http.StatusNotFound, "model not found, please check request")
-				return
-			}
-		}
-		if taskId != "" {
-			// write db
-			if err := p.taskStore.Put(taskId, map[string]interface{}{
-				datastore.KTaskIdColumnName: taskId,
-				datastore.KTaskUser:         username,
-				datastore.KTaskStatus:       config.TASK_QUEUE,
-				datastore.KTaskCancel:       int64(config.CANCEL_INIT),
-				datastore.KTaskCreateTime:   fmt.Sprintf("%d", utils.TimestampS()),
-			}); err != nil {
-				logrus.WithFields(logrus.Fields{"taskId": taskId}).Error("[Error] put db err=", err.Error())
-				c.JSON(http.StatusInternalServerError, models.SubmitTaskResponse{
-					TaskId:  taskId,
-					Status:  config.TASK_FAILED,
-					Message: utils.String(err.Error()),
-				})
-				return
-			}
-			c.Header("taskId", taskId)
+		if endPoint == "" {
+			c.JSON(http.StatusInternalServerError, models.SubmitTaskResponse{
+				TaskId:  taskId,
+				Status:  config.TASK_FAILED,
+				Message: utils.String("not get endpoint, please register"),
+			})
+			return
 		}
 	}
+
+	if taskId != "" {
+		// write db
+		if err := p.taskStore.Put(taskId, map[string]interface{}{
+			datastore.KTaskIdColumnName: taskId,
+			datastore.KTaskUser:         username,
+			datastore.KTaskStatus:       config.TASK_QUEUE,
+			datastore.KTaskCancel:       int64(config.CANCEL_INIT),
+			datastore.KTaskCreateTime:   fmt.Sprintf("%d", utils.TimestampS()),
+		}); err != nil {
+			logrus.WithFields(logrus.Fields{"taskId": taskId}).Error("[Error] put db err=", err.Error())
+			c.JSON(http.StatusInternalServerError, models.SubmitTaskResponse{
+				TaskId:  taskId,
+				Status:  config.TASK_FAILED,
+				Message: utils.String(err.Error()),
+			})
+			return
+		}
+		c.Header("taskId", taskId)
+	}
+
 	req, err := http.NewRequest(c.Request.Method, fmt.Sprintf("%s%s", endPoint, c.Request.URL.String()),
 		bytes.NewReader(body))
 	if err != nil {
