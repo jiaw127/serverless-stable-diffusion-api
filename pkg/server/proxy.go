@@ -78,6 +78,9 @@ func NewProxyServer(port string, dbType datastore.DatastoreType, mode string) (*
 	var baseUrl = fmt.Sprintf("/2016-08-15/proxy/%s.LATEST/%s",
 		config.ConfigGlobal.ServiceName, config.ConfigGlobal.FunctionName)
 	handler.RegisterHandlersWithOptions(router, proxyHandler, handler.GinServerOptions{BaseURL: baseUrl})
+	baseUrl = fmt.Sprintf("/2016-08-15/proxy/%s.%s__stable/%s",
+		config.ConfigGlobal.ServiceName, config.ConfigGlobal.FunctionName, config.ConfigGlobal.FunctionName)
+	handler.RegisterHandlersWithOptions(router, proxyHandler, handler.GinServerOptions{BaseURL: baseUrl})
 	router.NoRoute(proxyHandler.NoRouterHandler)
 
 	return &ProxyServer{

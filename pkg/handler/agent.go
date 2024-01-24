@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -737,14 +738,12 @@ func ReverseProxy(c *gin.Context) {
 	proxy.Director = func(req *http.Request) {
 		req.Header = c.Request.Header
 		req.Host = remote.Host
-		replacePath := fmt.Sprintf("/2016-08-15/proxy/%s.LATEST/%s",
-			config.ConfigGlobal.ServiceName, config.ConfigGlobal.FunctionName)
-		req.URL.Path = strings.Replace(req.URL.Path, replacePath, "", 1)
+		reStr := fmt.Sprintf("/2016-08-15/proxy/%s..*/%s", config.ConfigGlobal.ServiceName,
+			config.ConfigGlobal.FunctionName)
+		re, _ := regexp.Compile(reStr)
+		req.URL.Path = re.ReplaceAllString(req.URL.Path, "")
 		req.URL.Scheme = remote.Scheme
 		req.URL.Host = remote.Host
-		//if strings.HasPrefix(req.URL.Path, "/internal/ping") {
-		//	time.Sleep(500 * time.Millisecond)
-		//}
 		originalDirector(req)
 	}
 
@@ -795,9 +794,10 @@ func (a *AgentHandler) NoRouterAgentHandler(c *gin.Context) {
 			return
 		}
 	}
-	replacePath := fmt.Sprintf("/2016-08-15/proxy/%s.LATEST/%s",
-		config.ConfigGlobal.ServiceName, config.ConfigGlobal.FunctionName)
-	urlPath := strings.Replace(c.Request.URL.String(), replacePath, "", 1)
+	reStr := fmt.Sprintf("/2016-08-15/proxy/%s..*/%s", config.ConfigGlobal.ServiceName,
+		config.ConfigGlobal.FunctionName)
+	re, _ := regexp.Compile(reStr)
+	urlPath := re.ReplaceAllString(c.Request.URL.String(), "")
 	req, err := http.NewRequest(c.Request.Method,
 		fmt.Sprintf("%s%s", config.ConfigGlobal.SdUrlPrefix, urlPath), bytes.NewBuffer(body))
 	if err != nil {
