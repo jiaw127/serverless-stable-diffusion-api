@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -738,10 +737,17 @@ func ReverseProxy(c *gin.Context) {
 	proxy.Director = func(req *http.Request) {
 		req.Header = c.Request.Header
 		req.Host = remote.Host
-		reStr := fmt.Sprintf("/2016-08-15/proxy/%s..*/%s", config.ConfigGlobal.ServiceName,
-			config.ConfigGlobal.FunctionName)
-		re, _ := regexp.Compile(reStr)
-		req.URL.Path = re.ReplaceAllString(req.URL.Path, "")
+		//reStr := fmt.Sprintf("/2016-08-15/proxy/%s..*/%s", config.ConfigGlobal.ServiceName,
+		//	config.ConfigGlobal.FunctionName)
+		//re, _ := regexp.Compile(reStr)
+		//req.URL.Path = re.ReplaceAllString(req.URL.Path, "")
+		//logrus.Info(req.URL.Path)
+		replacePath := fmt.Sprintf("/2016-08-15/proxy/%s.LATEST/%s",
+			config.ConfigGlobal.ServiceName, config.ConfigGlobal.FunctionName)
+		req.URL.Path = strings.Replace(req.URL.Path, replacePath, "", 1)
+		replacePath = fmt.Sprintf("/2016-08-15/proxy/%s.%s_stable/%s",
+			config.ConfigGlobal.ServiceName, config.ConfigGlobal.FunctionName, config.ConfigGlobal.FunctionName)
+		req.URL.Path = strings.Replace(req.URL.Path, replacePath, "", 1)
 		req.URL.Scheme = remote.Scheme
 		req.URL.Host = remote.Host
 		originalDirector(req)
@@ -794,10 +800,16 @@ func (a *AgentHandler) NoRouterAgentHandler(c *gin.Context) {
 			return
 		}
 	}
-	reStr := fmt.Sprintf("/2016-08-15/proxy/%s..*/%s", config.ConfigGlobal.ServiceName,
-		config.ConfigGlobal.FunctionName)
-	re, _ := regexp.Compile(reStr)
-	urlPath := re.ReplaceAllString(c.Request.URL.String(), "")
+	//reStr := fmt.Sprintf("/2016-08-15/proxy/%s..*/%s", config.ConfigGlobal.ServiceName,
+	//	config.ConfigGlobal.FunctionName)
+	//re, _ := regexp.Compile(reStr)
+	//urlPath := re.ReplaceAllString(c.Request.URL.String(), "")
+	replacePath := fmt.Sprintf("/2016-08-15/proxy/%s.LATEST/%s",
+		config.ConfigGlobal.ServiceName, config.ConfigGlobal.FunctionName)
+	urlPath := strings.Replace(c.Request.URL.String(), replacePath, "", 1)
+	replacePath = fmt.Sprintf("/2016-08-15/proxy/%s.%s_stable/%s",
+		config.ConfigGlobal.ServiceName, config.ConfigGlobal.FunctionName, config.ConfigGlobal.FunctionName)
+	urlPath = strings.Replace(urlPath, replacePath, "", 1)
 	req, err := http.NewRequest(c.Request.Method,
 		fmt.Sprintf("%s%s", config.ConfigGlobal.SdUrlPrefix, urlPath), bytes.NewBuffer(body))
 	if err != nil {
