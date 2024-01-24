@@ -745,8 +745,9 @@ func ReverseProxy(c *gin.Context) {
 		replacePath := fmt.Sprintf("/2016-08-15/proxy/%s.LATEST/%s",
 			config.ConfigGlobal.ServiceName, config.ConfigGlobal.FunctionName)
 		req.URL.Path = strings.Replace(req.URL.Path, replacePath, "", 1)
-		replacePath = fmt.Sprintf("/2016-08-15/proxy/%s.%s_stable/%s",
+		replacePath = fmt.Sprintf("/2016-08-15/proxy/%s.%s__stable/%s",
 			config.ConfigGlobal.ServiceName, config.ConfigGlobal.FunctionName, config.ConfigGlobal.FunctionName)
+		logrus.Info(replacePath)
 		req.URL.Path = strings.Replace(req.URL.Path, replacePath, "", 1)
 		req.URL.Scheme = remote.Scheme
 		req.URL.Host = remote.Host
@@ -807,7 +808,7 @@ func (a *AgentHandler) NoRouterAgentHandler(c *gin.Context) {
 	replacePath := fmt.Sprintf("/2016-08-15/proxy/%s.LATEST/%s",
 		config.ConfigGlobal.ServiceName, config.ConfigGlobal.FunctionName)
 	urlPath := strings.Replace(c.Request.URL.String(), replacePath, "", 1)
-	replacePath = fmt.Sprintf("/2016-08-15/proxy/%s.%s_stable/%s",
+	replacePath = fmt.Sprintf("/2016-08-15/proxy/%s.%s__stable/%s",
 		config.ConfigGlobal.ServiceName, config.ConfigGlobal.FunctionName, config.ConfigGlobal.FunctionName)
 	urlPath = strings.Replace(urlPath, replacePath, "", 1)
 	req, err := http.NewRequest(c.Request.Method,
