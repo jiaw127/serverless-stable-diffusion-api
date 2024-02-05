@@ -132,10 +132,6 @@ func (p *AgentServer) Close(shutdownTimeout time.Duration) error {
 		log.SDLogInstance.Close()
 	}
 
-	if module.ProxyGlobal != nil {
-		module.ProxyGlobal.Close()
-	}
-
 	// shutdown server
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()

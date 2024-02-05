@@ -6,7 +6,6 @@ import (
 	"github.com/devsapp/serverless-stable-diffusion-api/pkg/datastore"
 	"github.com/devsapp/serverless-stable-diffusion-api/pkg/server"
 	"github.com/sirupsen/logrus"
-	"gopkg.in/natefinch/lumberjack.v2"
 	"os"
 	"os/signal"
 	"syscall"
@@ -39,13 +38,13 @@ func logInit(logLevel, logFile string) {
 	default:
 		logrus.SetLevel(logrus.WarnLevel)
 	}
-	logrus.SetOutput(&lumberjack.Logger{
-		Filename:   logFile, // log output dir
-		MaxSize:    50,      // MB, max logfile size
-		MaxBackups: 3,       // max num logfile
-		MaxAge:     3,       // max day logfile
-		Compress:   false,   // is compress or not
-	})
+	//logrus.SetOutput(&lumberjack.Logger{
+	//	Filename:   logFile, // log output dir
+	//	MaxSize:    50,      // MB, max logfile size
+	//	MaxBackups: 3,       // max num logfile
+	//	MaxAge:     3,       // max day logfile
+	//	Compress:   false,   // is compress or not
+	//})
 }
 
 func main() {

@@ -57,13 +57,9 @@ func NewSDManager(port string) *SDManager {
 
 func (s *SDManager) getEnv() []string {
 	env := make([]string, 0)
-	// not set DISABLE_HF_CHECK, default proxy enable
-	if !config.ConfigGlobal.GetDisableHealthCheck() {
-		env = append(os.Environ(),
-			"HTTP_PROXY=http://127.0.0.1:1080",
-			"HTTPS_PROXY=http://127.0.0.1:1080",
-		)
-	}
+	env = append(os.Environ(),
+		"HF_HUB_OFFLINE=1",
+	)
 	return env
 }
 
